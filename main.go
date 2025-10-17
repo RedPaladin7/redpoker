@@ -1,13 +1,11 @@
 package main
 
-import (
-	"fmt"
-
-	"github.com/RedPaldin7/redpoker/deck"
-)
+import "github.com/RedPaldin7/redpoker/p2p"
 
 func main(){
-
-	d := deck.New()
-	fmt.Println(d)
+	cfg := p2p.ServerConfig{
+		ListenAddr: ":8080",
+	}
+	server := p2p.NewServer(cfg)
+	server.Start()
 }
