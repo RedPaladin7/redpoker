@@ -2,10 +2,8 @@ package p2p
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/gob"
 	"fmt"
-	"io"
 	"net"
 
 	"github.com/sirupsen/logrus"
@@ -75,15 +73,24 @@ func (s *Server) Start() {
 	s.transport.ListenAndAccept()
 }
 
+func (s *Server) sendPeerList(p *Peer) error {
+	peerList := make([]net.Addr, len(s.peers))
+	msg := NewMessage(s.ListenAddr, peerList)
+	buf := new(bytes.Buffer)
+	if err := gob.NewEncoder(buf).Encode(peerList); err != nil{
+		return err
+	}
+	return p.Send(buf.Bytes())
+}
+
 func (s *Server) SendHandshake(p *Peer) error {
 	hs := &Handshake{
 		GameVariant: s.GameVariant,
 		Version: s.Version,
+		GameStatus: s.gameState.gameStatus,
 	}
 	buf := new(bytes.Buffer)
-	// if err := hs.Encode(buf); err != nil {
-	// 	return err
-	// }
+
 	if err := gob.NewEncoder(buf).Encode(hs); err != nil{
 		return err
 	}
@@ -97,9 +104,10 @@ func (s *Server) Connect(addr string) error {
 	}
 	peer := &Peer{
 		conn: conn,
+		outbound: true,
 	}
 	s.addPeer <- peer
-	return peer.Send([]byte(s.Version))
+	return s.SendHandshake(peer)
 }
 
 func (s *Server) loop() {
@@ -112,12 +120,25 @@ func (s *Server) loop() {
 			delete(s.peers, peer.conn.RemoteAddr())
 
 		case peer := <-s.addPeer:
-			s.SendHandshake(peer)
 			if err := s.handshake(peer); err != nil {
-				logrus.Errorf("handshake with incoming player failed: %s", err)
+				logrus.Errorf("%s: handshake with incoming player failed: %s", s.ListenAddr, err)
+				peer.conn.Close()
+				delete(s.peers, peer.conn.RemoteAddr())
 				continue
 			}
 			go peer.ReadLoop(s.msgCh)
+			if !peer.outbound{
+				if err := s.SendHandshake(peer); err != nil{
+					logrus.Errorf("failed to send handshake with peer: %s", err)
+					peer.conn.Close()
+					delete(s.peers, peer.conn.RemoteAddr())
+					continue
+				}
+				if err := s.sendPeerList(peer); err != nil{
+					logrus.Errorf("peerlist error: %s", err)
+					continue
+				}
+			}
 			logrus.WithFields(logrus.Fields{
 				"addr": peer.conn.RemoteAddr(),
 			}).Info("handshake successfull: new player connected")
@@ -131,25 +152,6 @@ func (s *Server) loop() {
 	}
 }
 
-type Handshake struct {
-	Version string 
-	GameVariant GameVariant
-}
-
-func (hs *Handshake) Encode(w io.Writer) error {
-	if err := binary.Write(w, binary.LittleEndian, []byte(hs.Version)); err != nil {
-		return err
-	}
-	return binary.Write(w, binary.LittleEndian, &hs.GameVariant)
-}
-
-func (hs *Handshake) Decode(r io.Reader) error {
-	if err := binary.Read(r, binary.LittleEndian, []byte(hs.Version)); err != nil {
-		return err
-	}
-	return binary.Read(r, binary.LittleEndian, &hs.GameVariant)
-}
-
 // client encodes handshake object and sends it 
 // only raw bytes can be sent over net.Conn object
 func (s *Server) handshake(p *Peer) error {
@@ -157,11 +159,8 @@ func (s *Server) handshake(p *Peer) error {
 	if err := gob.NewDecoder(p.conn).Decode(hs); err != nil {
 		return err
 	}
-	// if err := hs.Decode(p.conn); err != nil{
-	// 	return err
-	// }
 	if s.GameVariant != hs.GameVariant{
-		return fmt.Errorf("invalid gamevariant %s", hs.GameVariant)
+		return fmt.Errorf("gamevariant does not match: %s", hs.GameVariant)
 	}
 	if s.Version != hs.Version{
 		return fmt.Errorf("invalid version %s", hs.Version)
@@ -170,6 +169,7 @@ func (s *Server) handshake(p *Peer) error {
 		"peer": p.conn.RemoteAddr(),
 		"version": hs.Version,
 		"variant": hs.GameVariant,
+		"gameStatus": hs.GameStatus,
 	}).Info("received handshake")
 	return nil
 }
