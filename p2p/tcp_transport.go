@@ -9,6 +9,11 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type NetAddr string 
+
+func(n NetAddr) String() string {return string(n)}
+func(n NetAddr) Network() string {return "tcp"}
+
 type Peer struct {
 	conn net.Conn
 	outbound bool 

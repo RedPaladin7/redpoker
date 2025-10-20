@@ -1,32 +1,31 @@
 package main
 
 import (
-	"log"
 	"time"
 
 	"github.com/RedPaldin7/redpoker/p2p"
 )
 
-func main(){
+func makeServerAndStart(addr string) *p2p.Server{
 	cfg := p2p.ServerConfig{
 		Version: "REDPOKER V0.1-beta",
-		ListenAddr: ":3000",
+		ListenAddr: addr,
 		GameVariant: p2p.TexasHoldem,
 	}
 	server := p2p.NewServer(cfg)
 	go server.Start()
-
 	time.Sleep(1 * time.Second)
+	return server
+}
 
-	remoteConfig := p2p.ServerConfig{
-		ListenAddr: ":4000",
-		Version: "REDPOKER V0.1-beta",
-		GameVariant: p2p.TexasHoldem,
-	}
-	remoteServer := p2p.NewServer(remoteConfig)
-	go remoteServer.Start()
-	if err := remoteServer.Connect(":3000"); err != nil {
-		log.Fatal(err)
-	}
+func main(){
+	playerA := makeServerAndStart(":3000")
+	playerB := makeServerAndStart(":4000")
+	playerC := makeServerAndStart(":5000")
+
+	playerC.Connect(playerA.ListenAddr)
+	time.Sleep(1 * time.Second)
+	playerB.Connect(playerC.ListenAddr)
+	_ = playerB
 	select{}
 }

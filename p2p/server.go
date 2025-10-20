@@ -74,10 +74,17 @@ func (s *Server) Start() {
 }
 
 func (s *Server) sendPeerList(p *Peer) error {
-	peerList := make([]net.Addr, len(s.peers))
+	peerList := MessagePeerList{
+		Peers: make([]string, len(s.peers)),
+	}
+	it := 0 
+	for addr := range s.peers {
+		peerList.Peers[it] = addr.String()
+		it++
+	}
 	msg := NewMessage(s.ListenAddr, peerList)
 	buf := new(bytes.Buffer)
-	if err := gob.NewEncoder(buf).Encode(peerList); err != nil{
+	if err := gob.NewEncoder(buf).Encode(msg); err != nil{
 		return err
 	}
 	return p.Send(buf.Bytes())
@@ -175,6 +182,28 @@ func (s *Server) handshake(p *Peer) error {
 }
 
 func (s *Server) handleMessage(msg *Message) error {
-	fmt.Printf("%+v\n", msg)
+	logrus.WithFields(logrus.Fields{
+		"from": msg.From,
+	}).Info("received message")
+
+	switch v := msg.Payload.(type) {
+	case MessagePeerList:
+		return s.handlePeerList(v)
+	}
 	return nil
+}
+
+func (s *Server) handlePeerList(l MessagePeerList) error {
+	fmt.Printf("peerlist => %+v\n", l.Peers)
+	for i := 0; i < len(l.Peers); i++ {
+		if err := s.Connect(l.Peers[i]); err != nil {
+			logrus.Errorf("failed to dial peer: %s", err)
+			continue
+		}
+	}
+	return nil
+}
+
+func init() {
+	gob.Register(MessagePeerList{})
 }
