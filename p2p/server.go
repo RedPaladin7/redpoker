@@ -81,6 +81,9 @@ func (s *Server) sendPeerList(p *Peer) error {
 	for _, peer := range s.peers {
 		peerList.Peers = append(peerList.Peers, peer.listenAddr)
 	}
+	if len(peerList.Peers) == 0 {
+		return nil
+	}
 	msg := NewMessage(s.ListenAddr, peerList)
 	buf := new(bytes.Buffer)
 	if err := gob.NewEncoder(buf).Encode(msg); err != nil{
@@ -94,6 +97,7 @@ func (s *Server) SendHandshake(p *Peer) error {
 		GameVariant: s.GameVariant,
 		Version: s.Version,
 		GameStatus: s.gameState.gameStatus,
+		ListenAddr: s.ListenAddr,
 	}
 	buf := new(bytes.Buffer)
 
@@ -103,8 +107,19 @@ func (s *Server) SendHandshake(p *Peer) error {
 	return p.Send(buf.Bytes())
 }
 
+func (s *Server) isInPeerList(addr string) bool {
+	for _, peer := range s.peers {
+		if peer.listenAddr == addr {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) Connect(addr string) error {
-	fmt.Printf("dialing from %s to %s\n", s.ListenAddr, addr)
+	if s.isInPeerList(addr) {
+		return nil
+	}
 	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
 	if err != nil {
 		return err
@@ -114,7 +129,6 @@ func (s *Server) Connect(addr string) error {
 		outbound: true,
 	}
 	s.addPeer <- peer
-	fmt.Printf("dial from %s to %s successfull\n", s.ListenAddr, addr)
 	return s.SendHandshake(peer)
 }
 
@@ -164,6 +178,7 @@ func (s *Server) handleNewPeer (peer *Peer) error {
 		"variant": hs.GameVariant,
 		"gameStatus": hs.GameStatus,
 		"listenAddr": peer.listenAddr,
+		"we": s.ListenAddr,
 	}).Info("handshake successfull: new player connected")
 	s.peers[peer.conn.RemoteAddr()] = peer
 	return nil 
@@ -188,10 +203,6 @@ func (s *Server) handshake(p *Peer) (*Handshake, error) {
 }
 
 func (s *Server) handleMessage(msg *Message) error {
-	logrus.WithFields(logrus.Fields{
-		"from": msg.From,
-	}).Info("received message")
-
 	switch v := msg.Payload.(type) {
 	case MessagePeerList:
 		return s.handlePeerList(v)
@@ -200,6 +211,10 @@ func (s *Server) handleMessage(msg *Message) error {
 }
 
 func (s *Server) handlePeerList(l MessagePeerList) error {
+	logrus.WithFields(logrus.Fields{
+		"we": s.ListenAddr,
+		"list": l.Peers,
+	}).Info("received peerList message")
 	fmt.Printf("peerlist => %+v\n", l)
 	for i := 0; i < len(l.Peers); i++ {
 		if err := s.Connect(l.Peers[i]); err != nil {
