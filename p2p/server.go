@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -40,6 +41,7 @@ type ServerConfig struct {
 type Server struct {
 	ServerConfig
 	transport *TCPTransport
+	peerLock sync.RWMutex
 	peers    map[net.Addr]*Peer
 	addPeer  chan *Peer
 	delPeer  chan *Peer
@@ -76,11 +78,11 @@ func (s *Server) Start() {
 
 func (s *Server) sendPeerList(p *Peer) error {
 	peerList := MessagePeerList{
-		Peers: []string{},
+		Peers: s.Peers(),
 	}
-	for _, peer := range s.peers {
-		peerList.Peers = append(peerList.Peers, peer.listenAddr)
-	}
+	// for _, peer := range s.peers {
+	// 	peerList.Peers = append(peerList.Peers, peer.listenAddr)
+	// }
 	if len(peerList.Peers) == 0 {
 		return nil
 	}
@@ -90,6 +92,25 @@ func (s *Server) sendPeerList(p *Peer) error {
 		return err
 	}
 	return p.Send(buf.Bytes())
+}
+
+func (s *Server) AddPeer(p *Peer){
+	s.peerLock.Lock()
+	defer s.peerLock.Unlock()
+	s.peers[p.conn.RemoteAddr()] = p
+}
+
+func (s *Server) Peers() []string {
+	s.peerLock.RLock()
+	defer s.peerLock.RUnlock()
+
+	peers := make([]string, len(s.peers))
+	it := 0
+	for _, peer := range s.peers {
+		peers[it] = peer.listenAddr
+		it++
+	}
+	return peers
 }
 
 func (s *Server) SendHandshake(p *Peer) error {
@@ -108,8 +129,9 @@ func (s *Server) SendHandshake(p *Peer) error {
 }
 
 func (s *Server) isInPeerList(addr string) bool {
-	for _, peer := range s.peers {
-		if peer.listenAddr == addr {
+	peers := s.Peers()
+	for i := 0; i < len(peers); i++ {
+		if peers[i] == addr{
 			return true
 		}
 	}
@@ -168,9 +190,11 @@ func (s *Server) handleNewPeer (peer *Peer) error {
 			delete(s.peers, peer.conn.RemoteAddr())
 			fmt.Errorf("failed to send handshake with peer: %s", err)
 		}
-		if err := s.sendPeerList(peer); err != nil{
-			return fmt.Errorf("peerlist error: %s", err)
-		}
+		go func(){
+			if err := s.sendPeerList(peer); err != nil{
+				logrus.Errorf("peerlist error: %s", err)
+			}
+		}()
 	}
 	logrus.WithFields(logrus.Fields{
 		"peer": peer.conn.RemoteAddr(),
@@ -180,7 +204,8 @@ func (s *Server) handleNewPeer (peer *Peer) error {
 		"listenAddr": peer.listenAddr,
 		"we": s.ListenAddr,
 	}).Info("handshake successfull: new player connected")
-	s.peers[peer.conn.RemoteAddr()] = peer
+	// s.peers[peer.conn.RemoteAddr()] = peer
+	s.AddPeer(peer)
 	return nil 
 }
 
