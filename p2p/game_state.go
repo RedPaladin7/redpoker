@@ -11,6 +11,7 @@ import (
 
 type Player struct {
 	Status GameStatus
+	ListenAddr string 
 }
 
 type GameState struct {
@@ -22,6 +23,7 @@ type GameState struct {
 	playersWaitingForCards int32
 	players map[string]*Player
 	playersLock sync.RWMutex
+	playersList []*Player
 
 	decksReceivedLock sync.RWMutex
 	decksReceived map[string]bool
@@ -63,10 +65,12 @@ func (g *GameState) CheckNeedDealCards(){
 
 func (g *GameState) GetPlayersWithStatus(s GameStatus) []string {
 	players := []string{}
-	for addr := range g.players {
-		players = append(players, addr)
+	for addr, player := range g.players{
+		if player.Status == s{
+			players = append(players, addr)
+		}
 	}
-	return players 
+	return players
 }
 
 func (g *GameState) SetDecksReceived(from string) {
@@ -76,28 +80,32 @@ func (g *GameState) SetDecksReceived(from string) {
 }
 
 func (g *GameState) ShuffleAndEncrypt(from string, deck [][]byte) error {
-	g.SetStatus(GameStatusReceivingCards)
-	g.SetDecksReceived(from)
-
-	players := g.GetPlayersWithStatus(GameStatusReceivingCards)
-	g.decksReceivedLock.RLock()
-	for _, addr := range players {
-		_, ok := g.decksReceived[addr]
-		if !ok{
-			return nil
-		}
-	}
-	g.decksReceivedLock.RUnlock()
-	g.SetStatus(GameStatusPreFlop)
-	g.SendToPlayerWithStatus(MessageEncDeck{Deck: [][]byte{}}, GameStatusReceivingCards)
+	dealToPlayer := g.playersList[0]
+	logrus.WithFields(logrus.Fields{
+		"recvFromPlayer": from,
+		"we": g.listenAddr,
+		"dealingToPlayer": dealToPlayer,
+	}).Info("received cards and going to shuffle")
+	g.SendToPlayer(dealToPlayer.ListenAddr, MessageEncDeck{Deck:[][]byte{}})
+	g.SetStatus(GameStatusShuffleAndDeal)
 	return nil
 }
 
 func (g *GameState) InitiateShuffleAndDeal(){
-	g.SetStatus(GameStatusReceivingCards)
-	// g.broadcastch <- MessageEncDeck{Deck: [][]byte{}}
+	dealToPlayer := g.playersList[0]
+	g.SendToPlayer(dealToPlayer.ListenAddr, MessageEncDeck{Deck: [][]byte{}})
+	g.SetStatus(GameStatusShuffleAndDeal)
+}
 
-	g.SendToPlayerWithStatus(MessageEncDeck{Deck: [][]byte{}}, GameStatusWaitingForCards)
+func (g *GameState) SendToPlayer(addr string, payload any) {
+	g.broadcastch <- BroadcastTo{
+		To: []string{addr},
+		Payload: payload,
+	}
+	logrus.WithFields(logrus.Fields{
+		"payload": payload,
+		"player": addr,
+	}).Info("sending payload to player")
 }
 
 func (g *GameState) SendToPlayerWithStatus(payload any, s GameStatus){
@@ -139,8 +147,12 @@ func (g *GameState) AddPlayer(addr string, status GameStatus){
 		g.AddPlayerWaitingForCards()
 	}
 
-	g.players[addr] = new(Player)
-	//g.CheckNeedDealCards()
+	player := &Player{
+		ListenAddr: addr,
+	}
+
+	g.players[addr] = player
+	g.playersList = append(g.playersList, player)
 	g.SetPlayerStatus(addr, status)
 	logrus.WithFields(logrus.Fields{
 		"addr": addr,
