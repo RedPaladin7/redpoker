@@ -238,10 +238,8 @@ func (s *Server) Broadcast(broadcastMsg BroadcastTo) error {
 	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
 		return err
 	}
-	fmt.Printf("%+v\n", broadcastMsg)
 	for _, addr := range broadcastMsg.To { 
 		peer, ok := s.peers[addr]
-		fmt.Printf("%+v\n", peer)
 		if ok {
 			go func(peer *Peer){
 				if err := peer.Send(buf.Bytes()); err != nil {
@@ -254,17 +252,6 @@ func (s *Server) Broadcast(broadcastMsg BroadcastTo) error {
 			}(peer)
 		}
 	}
-	// for _, peer := range s.peers {
-	// 	go func(peer *Peer){
-	// 		if err := peer.Send(buf.Bytes()); err != nil{
-	// 			logrus.Errorf("broadcast to peer error: %s", err)
-	// 		}
-	// 		logrus.WithFields(logrus.Fields{
-	// 			"we": s.ListenAddr,
-	// 			"peer": peer.listenAddr,
-	// 		}).Info("broadcast")
-	// 	}(peer)
-	// }
 	return nil
 }
 
@@ -301,7 +288,7 @@ func (s *Server) handleEncDeck(from string, msg MessageEncDeck) error {
 		"we": s.ListenAddr,
 		"from": from,
 	}).Info("recv enc deck")
-	return s.gameState.ShuffleAndEncrypt(from, msg.Deck)
+    return s.gameState.ShuffleAndEncrypt(from, msg.Deck)
 }
 
 func (s *Server) handlePeerList(l MessagePeerList) error {
