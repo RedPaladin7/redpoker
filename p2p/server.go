@@ -32,6 +32,7 @@ const (
 type ServerConfig struct {
 	Version    string
 	ListenAddr string
+	APIListenAddr string 
 	GameVariant GameVariant
 }
 
@@ -69,6 +70,14 @@ func NewServer(cfg ServerConfig) *Server {
 
 	tr.AddPeer = s.addPeer
 	tr.DelPeer = s.delPeer
+
+	go func(s *Server){
+		apiServer := NewAPIServer(cfg.APIListenAddr, s.gameState)
+		logrus.WithFields(logrus.Fields{
+			"listenAddr": cfg.APIListenAddr,
+		}).Info("starting API server")
+		apiServer.Run()
+	}(s)
 
 	return s
 }
@@ -309,4 +318,5 @@ func (s *Server) handlePeerList(l MessagePeerList) error {
 func init() {
 	gob.Register(MessagePeerList{})
 	gob.Register(MessageEncDeck{})
+	gob.Register(MessageReady{})
 }

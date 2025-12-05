@@ -6,10 +6,11 @@ import (
 	"github.com/RedPaldin7/redpoker/p2p"
 )
 
-func makeServerAndStart(addr string) *p2p.Server{
+func makeServerAndStart(addr, apiAddr string) *p2p.Server{
 	cfg := p2p.ServerConfig{
 		Version: "REDPOKER V0.1-beta",
 		ListenAddr: addr,
+		APIListenAddr: apiAddr,
 		GameVariant: p2p.TexasHoldem,
 	}
 	server := p2p.NewServer(cfg)
@@ -19,9 +20,9 @@ func makeServerAndStart(addr string) *p2p.Server{
 }
 
 func main(){
-	playerA := makeServerAndStart(":3000")
-	playerB := makeServerAndStart(":4000")
-	playerC := makeServerAndStart(":5000")
+	playerA := makeServerAndStart(":3000", ":3001")
+	playerB := makeServerAndStart(":4000", ":4001")
+	playerC := makeServerAndStart(":5000", ":5001")
 	// playerD := makeServerAndStart(":6000")
 	// playerE := makeServerAndStart(":7000")
 	

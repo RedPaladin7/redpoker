@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"sync/atomic"
+
 	// "sync/atomic"
 	"time"
 
@@ -64,6 +66,29 @@ func NewGame(addr string, bc chan BroadcastTo) *Game {
 	return g
 }
 
+func (g *Game) setStatus(s GameStatus) {
+	if g.currentStatus != s{
+		atomic.StoreInt32((*int32)(&g.currentStatus), (int32)(s))
+	}
+}
+
+func (g *Game) SetReady(){
+	g.playersReady.addRecvStatus(g.listenAddr)
+	g.sendToPlayers(MessageReady{}, g.getOtherPlayers()...)
+	g.setStatus(GameStatusPlayerReady)
+}
+
+func (g *Game) sendToPlayers(payload any, addr ...string) {
+	g.broadcastch <- BroadcastTo{
+		To: addr,
+		Payload: payload,
+	}
+	logrus.WithFields(logrus.Fields{
+		"payload": payload,
+		"player": addr,
+	}).Info("sending payload to player")
+}
+
 func (g *Game) AddPlayer(from string) {
 	g.playersList = append(g.playersList, from)
 	sort.Sort(g.playersList)
@@ -80,6 +105,18 @@ func (g *Game) loop() {
 			"status": g.currentStatus,
 		}).Info()
 	}
+}
+
+func (g *Game) getOtherPlayers() []string {
+	players := []string{}
+	
+	for _, addr := range g.playersList{
+		if addr == g.listenAddr {
+			continue 
+		}
+		players = append(players, addr)
+	}
+	return players
 }
 
 // type GameState struct {
