@@ -11,9 +11,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// net.Conn is general bidirection network connection (socket)
-// sync.RWMutex is read write lock (can be held by one writer or multiple reasders)
-
 type GameVariant uint8
 
 func (gv GameVariant) String() string {
@@ -47,7 +44,8 @@ type Server struct {
 	delPeer  chan *Peer
 	msgCh    chan *Message
 	broadcastch chan BroadcastTo
-	gameState *GameState
+	// gameState *GameState
+	gameState *Game 
 }
 
 func NewServer(cfg ServerConfig) *Server {
@@ -59,11 +57,12 @@ func NewServer(cfg ServerConfig) *Server {
 		msgCh:        make(chan *Message, 100),
 		broadcastch:  make(chan BroadcastTo, 100),
 	}
-	s.gameState = NewGameState(s.ListenAddr, s.broadcastch)
+	// s.gameState = NewGameState(s.ListenAddr, s.broadcastch)
+	s.gameState = NewGame(s.ListenAddr, s.broadcastch)
 
-	if s.ListenAddr == ":3000"{
-		s.gameState.isDealer = true
-	}
+	// if s.ListenAddr == ":3000"{
+	// 	s.gameState.isDealer = true
+	// }
 
 	tr := NewTCPTransport(s.ListenAddr)
 	s.transport = tr 
@@ -131,7 +130,7 @@ func (s *Server) SendHandshake(p *Peer) error {
 	hs := &Handshake{
 		GameVariant: s.GameVariant,
 		Version: s.Version,
-		GameStatus: s.gameState.gameStatus,
+		GameStatus: s.gameState.currentStatus,
 		ListenAddr: s.ListenAddr,
 	}
 	buf := new(bytes.Buffer)
@@ -227,7 +226,7 @@ func (s *Server) handleNewPeer (peer *Peer) error {
 	}).Info("handshake successfull: new player connected")
 	// s.peers[peer.conn.RemoteAddr()] = peer
 	s.AddPeer(peer)
-	s.gameState.AddPlayer(peer.listenAddr, hs.GameStatus)
+	s.gameState.AddPlayer(peer.listenAddr)
 	return nil 
 }
 
@@ -288,7 +287,8 @@ func (s *Server) handleEncDeck(from string, msg MessageEncDeck) error {
 		"we": s.ListenAddr,
 		"from": from,
 	}).Info("recv enc deck")
-    return s.gameState.ShuffleAndEncrypt(from, msg.Deck)
+    // return s.gameState.ShuffleAndEncrypt(from, msg.Deck)
+	return nil
 }
 
 func (s *Server) handlePeerList(l MessagePeerList) error {
