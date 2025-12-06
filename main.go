@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/RedPaldin7/redpoker/p2p"
@@ -23,16 +24,20 @@ func main(){
 	playerA := makeServerAndStart(":3000", ":3001")
 	playerB := makeServerAndStart(":4000", ":4001")
 	playerC := makeServerAndStart(":5000", ":5001")
-	// playerD := makeServerAndStart(":6000")
-	// playerE := makeServerAndStart(":7000")
+	
+	go func() {
+		time.Sleep(time.Second * 3)
+		http.Get("http://localhost:3001/ready")
+
+		time.Sleep(time.Second * 3)
+		http.Get("http://localhost:4001/ready")
+	}()
 	
 	time.Sleep(time.Millisecond * 200)
 	playerB.Connect(playerA.ListenAddr)
+
 	time.Sleep(time.Millisecond * 200)
 	playerC.Connect(playerB.ListenAddr)
-	// time.Sleep(time.Millisecond * 200)
-	// playerD.Connect(playerC.ListenAddr)
-	// time.Sleep(time.Millisecond * 200)
-	// playerE.Connect(playerD.ListenAddr)
+
 	select{}
 }
