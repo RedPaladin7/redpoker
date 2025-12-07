@@ -24,6 +24,7 @@ func main(){
 	playerA := makeServerAndStart(":3000", ":3001")
 	playerB := makeServerAndStart(":4000", ":4001")
 	playerC := makeServerAndStart(":5000", ":5001")
+	playerD := makeServerAndStart(":6000", ":6001")
 	
 	go func() {
 		time.Sleep(time.Second * 3)
@@ -38,6 +39,9 @@ func main(){
 
 	time.Sleep(time.Millisecond * 200)
 	playerC.Connect(playerB.ListenAddr)
+
+	time.Sleep(time.Millisecond * 200)
+	playerD.Connect(playerC.ListenAddr)
 
 	select{}
 }

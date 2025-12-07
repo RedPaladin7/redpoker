@@ -26,6 +26,20 @@ type Handshake struct {
 	ListenAddr string
 }
 
+type MessagePlayerAction struct {
+	CurrentGameStatus GameStatus
+	Action PlayerAction
+	Value int 
+}
+
+type MessagePreFlop struct {
+
+}
+
+func (msg MessagePreFlop) String() string {
+	return "MSG: PREFLOP"
+}
+
 type MessagePeerList struct {
 	Peers []string
 }

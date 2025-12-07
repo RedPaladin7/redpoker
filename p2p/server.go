@@ -66,7 +66,7 @@ func NewServer(cfg ServerConfig) *Server {
 	// }
 
 	tr := NewTCPTransport(s.ListenAddr)
-	s.transport = tr 
+	s.transport = tr
 
 	tr.AddPeer = s.addPeer
 	tr.DelPeer = s.delPeer
@@ -289,7 +289,25 @@ func (s *Server) handleMessage(msg *Message) error {
 		return s.handleMsgEncDeck(msg.From, v)
 	case MessageReady:
 		return s.handleMsgReady(msg.From)
+	case MessagePreFlop:
+		return s.handleMsgPreFlop(msg.From)
+	case MessagePlayerAction:
+		return s.handleGetMsgPlayerAction(msg.From, v)
 	}
+	return nil
+}
+
+func (s *Server) handleGetMsgPlayerAction(from string, msg MessagePlayerAction) error {
+	logrus.WithFields(logrus.Fields{
+		"we": s.ListenAddr,
+		"from": from,
+		"action": msg,
+	}).Info("received player action")
+	return nil
+}
+
+func (s *Server) handleMsgPreFlop(from string) error {
+	s.gameState.SetStatus(GameStatusPreFlop)
 	return nil
 }
 
@@ -326,4 +344,6 @@ func init() {
 	gob.Register(MessagePeerList{})
 	gob.Register(MessageEncDeck{})
 	gob.Register(MessageReady{})
+	gob.Register(MessagePreFlop{})
+	gob.Register(MessagePlayerAction{})
 }
