@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
-
-	// "sync/atomic"
 	"time"
 
 	// "github.com/RedPaldin7/redpoker/deck"
@@ -21,6 +19,24 @@ const (
 	PlayerActionCheck
 	PlayerActionBet
 )
+
+type PlayerActionsRecv struct {
+	recvActions map[string]PlayerAction
+	mu sync.RWMutex
+}
+
+func NewPlayerActionsRecv() *PlayerActionsRecv {
+	return &PlayerActionsRecv{
+		recvActions: make(map[string]PlayerAction),
+	}
+}
+
+func (pa *PlayerActionsRecv) addAction(from string, a PlayerAction) {
+	pa.mu.Lock()
+	defer pa.mu.Unlock()
+	
+	pa.recvActions[from] = a 
+}
 
 type PlayersReady struct {
 	recvStatus map[string]bool 
@@ -61,6 +77,8 @@ type Game struct {
 	playersList PlayersList
 	currentStatus GameStatus
 	currentDealer int32
+	currentPlayerTurn int32
+	recvPlayerActions *PlayerActionsRecv
 }
 
 func NewGame(addr string, bc chan BroadcastTo) *Game {
@@ -71,14 +89,31 @@ func NewGame(addr string, bc chan BroadcastTo) *Game {
 		listenAddr: addr,
 		currentStatus: GameStatusConnected,
 		currentDealer: -1,
+		recvPlayerActions: NewPlayerActionsRecv(),
 	}
 	g.playersList = append(g.playersList, addr)
 	go g.loop()
 	return g
 }
 
+func (g *Game) setCurrentPlayerTurn(index int32) {
+	atomic.StoreInt32(&g.currentPlayerTurn, index)
+}
+
+func (g *Game) canTakeAction(from string) bool {
+	currentPlayerAddr := g.playersList[g.currentPlayerTurn]
+	return currentPlayerAddr == from 
+}
+
+func (g *Game) handlePlayerAction(from string, action MessagePlayerAction) error {
+	if !g.canTakeAction(from) {
+		return fmt.Errorf("player (%s) taking action before his turn ", from)
+	}
+	return nil
+}
+
 func (g *Game) Fold() {
-	g.SetStatus(GameStatusPlayerReady)
+	g.SetStatus(GameStatusFolded)
 	g.sendToPlayers(MessagePlayerAction{
 		Action: PlayerActionFold,
 		CurrentGameStatus: g.currentStatus,
@@ -90,6 +125,9 @@ func (g *Game) SetStatus(s GameStatus){
 }
 
 func (g *Game) setStatus(s GameStatus) {
+	if s == GameStatusPreFlop{
+		g.setCurrentPlayerTurn(g.currentDealer + 1)
+	}
 	if g.currentStatus != s{
 		atomic.StoreInt32((*int32)(&g.currentStatus), (int32)(s))
 	}
