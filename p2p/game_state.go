@@ -12,30 +12,48 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type PlayerAction byte 
+type AtomicInt struct {
+	value int32
+}
 
-const (
-	PlayerActionFold PlayerAction = iota + 1
-	PlayerActionCheck
-	PlayerActionBet
-)
+func NewAtomicInt(value int32) *AtomicInt{
+	return &AtomicInt{
+		value: value,
+	}
+}
+
+func (a *AtomicInt) String() string {
+	return fmt.Sprintf("%d", a.value)
+}
+
+func (a *AtomicInt) Set(value int32){
+	atomic.StoreInt32(&a.value, value)
+}
+
+func (a *AtomicInt) Get() int32{
+	return atomic.LoadInt32(&a.value)
+}
+
+func (a *AtomicInt) Inc(){
+	a.Set(a.Get()+1)
+}
 
 type PlayerActionsRecv struct {
-	recvActions map[string]PlayerAction
+	recvActions map[string]MessagePlayerAction
 	mu sync.RWMutex
 }
 
 func NewPlayerActionsRecv() *PlayerActionsRecv {
 	return &PlayerActionsRecv{
-		recvActions: make(map[string]PlayerAction),
+		recvActions: make(map[string]MessagePlayerAction),
 	}
 }
 
-func (pa *PlayerActionsRecv) addAction(from string, a PlayerAction) {
+func (pa *PlayerActionsRecv) addAction(from string, action MessagePlayerAction) {
 	pa.mu.Lock()
 	defer pa.mu.Unlock()
 	
-	pa.recvActions[from] = a 
+	pa.recvActions[from] = action 
 }
 
 type PlayersReady struct {
@@ -76,8 +94,8 @@ type Game struct {
 	playersReady *PlayersReady
 	playersList PlayersList
 	currentStatus GameStatus
-	currentDealer int32
-	currentPlayerTurn int32
+	currentDealer *AtomicInt
+	currentPlayerTurn *AtomicInt
 	recvPlayerActions *PlayerActionsRecv
 }
 
@@ -88,20 +106,21 @@ func NewGame(addr string, bc chan BroadcastTo) *Game {
 		broadcastch: bc,
 		listenAddr: addr,
 		currentStatus: GameStatusConnected,
-		currentDealer: -1,
+		currentDealer: NewAtomicInt(0),
 		recvPlayerActions: NewPlayerActionsRecv(),
+		currentPlayerTurn: NewAtomicInt(0),
 	}
 	g.playersList = append(g.playersList, addr)
 	go g.loop()
 	return g
 }
 
-func (g *Game) setCurrentPlayerTurn(index int32) {
-	atomic.StoreInt32(&g.currentPlayerTurn, index)
-}
+// func (g *Game) setCurrentPlayerTurn(index int32) {
+// 	atomic.StoreInt32(&g.currentPlayerTurn, index)
+// }
 
 func (g *Game) canTakeAction(from string) bool {
-	currentPlayerAddr := g.playersList[g.currentPlayerTurn]
+	currentPlayerAddr := g.playersList[g.currentPlayerTurn.Get()]
 	return currentPlayerAddr == from 
 }
 
@@ -109,11 +128,36 @@ func (g *Game) handlePlayerAction(from string, action MessagePlayerAction) error
 	if !g.canTakeAction(from) {
 		return fmt.Errorf("player (%s) taking action before his turn ", from)
 	}
+	logrus.WithFields(logrus.Fields{
+		"we": g.listenAddr,
+		"from": from,
+	}).Info("received player action")
+	g.recvPlayerActions.addAction(from, action)
+	g.currentPlayerTurn.Inc()
 	return nil
 }
 
-func (g *Game) Fold() {
+func (g *Game) TakeAction(action PlayerAction) error {
+	if !g.canTakeAction(g.listenAddr){
+		return fmt.Errorf("I am taking action before it is my turn: %s\n", g.listenAddr)
+	}
+	switch action {
+	case PlayerActionFold:
+		return g.fold()
+	case PlayerActionCheck:
+		return g.check()
+	default:
+		return fmt.Errorf("performing invalid action (%s)", action)
+	}
+}
+
+func (g *Game) check() error {
+	return nil
+}
+
+func (g *Game) fold() error {
 	g.SetStatus(GameStatusFolded)
+	g.currentPlayerTurn.Inc()
 	g.sendToPlayers(MessagePlayerAction{
 		Action: PlayerActionFold,
 		CurrentGameStatus: g.currentStatus,
@@ -126,7 +170,7 @@ func (g *Game) SetStatus(s GameStatus){
 
 func (g *Game) setStatus(s GameStatus) {
 	if s == GameStatusPreFlop{
-		g.setCurrentPlayerTurn(g.currentDealer + 1)
+		g.currentPlayerTurn.Inc()
 	}
 	if g.currentStatus != s{
 		atomic.StoreInt32((*int32)(&g.currentStatus), (int32)(s))
@@ -134,11 +178,8 @@ func (g *Game) setStatus(s GameStatus) {
 }
 
 func (g *Game) getCurrentDealerAddr() (string, bool) {
-	currentDealer := g.playersList[0]
-	if g.currentDealer > -1 {
-		currentDealer = g.playersList[g.currentDealer]
-	}
-	return currentDealer, g.listenAddr == currentDealer
+	currentDealerAddr := g.playersList[g.currentDealer.Get()]
+	return currentDealerAddr, currentDealerAddr == g.listenAddr
 }
 
 func (g *Game) SetPlayerReady(from string) {
@@ -225,6 +266,8 @@ func (g *Game) loop() {
 			"status": g.currentStatus,
 			"currentDealer": currentDealerAddr,
 			// "playersReady": g.playersReady.recvStatus,
+			"nextPlayerTurn": g.currentPlayerTurn,
+			"playerActions": g.recvPlayerActions.recvActions,
 		}).Info()
 	}
 }

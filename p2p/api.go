@@ -38,8 +38,14 @@ func (s *APIServer) Run() {
 	r := mux.NewRouter()
 	r.HandleFunc("/ready", makeHTTPHandlerFunc(s.handlePlayerReady))
 	r.HandleFunc("/fold", makeHTTPHandlerFunc(s.handlePlayerFold))
+	r.HandleFunc("/check", makeHTTPHandlerFunc(s.handlePlayerCheck))
 	
 	http.ListenAndServe(s.listenAddr, r)
+}
+
+func (s *APIServer) handlePlayerCheck(w http.ResponseWriter, r *http.Request) error {
+	s.game.Check()
+	return JSON(w, http.StatusOK, []byte("CHECKED"))
 }
 
 func (s *APIServer) handlePlayerReady(w http.ResponseWriter, r *http.Request) error {

@@ -2,6 +2,27 @@ package p2p
 
 // import "github.com/RedPaldin7/redpoker/deck"
 
+type PlayerAction byte 
+
+func (pa PlayerAction) String() string {
+	switch pa {
+	case PlayerActionFold:
+		return "FOLDED"
+	case PlayerActionCheck:
+		return "CHECKED"
+	case PlayerActionBet:
+		return "BET"
+	default:
+		return "INVALID ACTION"
+	}
+}
+
+const (
+	PlayerActionFold PlayerAction = iota + 1
+	PlayerActionCheck
+	PlayerActionBet
+)
+
 type Message struct {
 	Payload any
 	From    string
