@@ -12,6 +12,8 @@ func (g GameStatus) String() string {
 		return "DEALING"
 	case GameStatusFolded:
 		return "FOLDED"
+	case GameStatusChecked:
+		return "CHECKED"
 	case GameStatusPreFlop:
 		return "PRE-FLOP"
 	case GameStatusFlop:
@@ -30,6 +32,7 @@ const (
 	GameStatusPlayerReady
 	GameStatusDealing 
 	GameStatusFolded
+	GameStatusChecked
 	GameStatusPreFlop 
 	GameStatusFlop 
 	GameStatusTurn 

@@ -137,31 +137,47 @@ func (g *Game) handlePlayerAction(from string, action MessagePlayerAction) error
 	return nil
 }
 
-func (g *Game) TakeAction(action PlayerAction) error {
+func (g *Game) TakeAction(action PlayerAction, value int) (err error) {
 	if !g.canTakeAction(g.listenAddr){
 		return fmt.Errorf("I am taking action before it is my turn: %s\n", g.listenAddr)
 	}
 	switch action {
 	case PlayerActionFold:
-		return g.fold()
+		err = g.fold()
 	case PlayerActionCheck:
-		return g.check()
+		err = g.check()
+	case PlayerActionBet:
+		err = g.bet(value)
 	default:
-		return fmt.Errorf("performing invalid action (%s)", action)
+		err = fmt.Errorf("performing invalid action (%s)", action)
 	}
+	if err != nil {
+		return err
+	}
+	g.currentPlayerTurn.Inc()
+	return 
+}
+
+func (g *Game) bet(value int) error {
+	
 }
 
 func (g *Game) check() error {
+	g.SetStatus(GameStatusChecked)
+	g.sendToPlayers(MessagePlayerAction{
+		Action: PlayerActionCheck,
+		CurrentGameStatus: g.currentStatus,
+	}, g.getOtherPlayers()...)
 	return nil
 }
 
 func (g *Game) fold() error {
 	g.SetStatus(GameStatusFolded)
-	g.currentPlayerTurn.Inc()
 	g.sendToPlayers(MessagePlayerAction{
 		Action: PlayerActionFold,
 		CurrentGameStatus: g.currentStatus,
 	}, g.getOtherPlayers()...)
+	return nil
 }
 
 func (g *Game) SetStatus(s GameStatus){
