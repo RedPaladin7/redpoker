@@ -52,11 +52,14 @@ func (s *APIServer) handlePlayerBet(w http.ResponseWriter, r *http.Request) erro
 	if err != nil {
 		return err
 	}
+	if err := s.game.TakeAction(PlayerActionBet, value); err != nil {
+		return err
+	}
 	return JSON(w, http.StatusOK, fmt.Sprintf("value: %d", value))
 }
 
 func (s *APIServer) handlePlayerCheck(w http.ResponseWriter, r *http.Request) error {
-	if err := s.game.TakeAction(PlayerActionCheck); err != nil {
+	if err := s.game.TakeAction(PlayerActionCheck, 0); err != nil {
 		return err
 	}
 	return JSON(w, http.StatusOK, "CHECKED")
@@ -68,7 +71,7 @@ func (s *APIServer) handlePlayerReady(w http.ResponseWriter, r *http.Request) er
 }
 
 func (s *APIServer) handlePlayerFold(w http.ResponseWriter, r *http.Request) error {
-	if err := s.game.TakeAction(PlayerActionFold); err != nil{
+	if err := s.game.TakeAction(PlayerActionFold, 0); err != nil{
 		return err
 	}
 	return JSON(w, http.StatusOK, "FOLD")

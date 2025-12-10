@@ -1,5 +1,26 @@
 package p2p
 
+type PlayerAction byte 
+
+func (pa PlayerAction) String() string {
+	switch pa {
+	case PlayerActionFold:
+		return "FOLDED"
+	case PlayerActionCheck:
+		return "CHECKED"
+	case PlayerActionBet:
+		return "BET"
+	default:
+		return "IDLE"
+	}
+}
+
+const (
+	PlayerActionFold PlayerAction = iota + 1
+	PlayerActionCheck
+	PlayerActionBet
+)
+
 type GameStatus int32
 
 func (g GameStatus) String() string {

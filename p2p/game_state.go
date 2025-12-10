@@ -93,7 +93,8 @@ type Game struct {
 	broadcastch chan BroadcastTo 
 	playersReady *PlayersReady
 	playersList PlayersList
-	currentStatus GameStatus
+	currentStatus *AtomicInt
+	currentPlayerAction *AtomicInt
 	currentDealer *AtomicInt
 	currentPlayerTurn *AtomicInt
 	recvPlayerActions *PlayerActionsRecv
@@ -105,7 +106,8 @@ func NewGame(addr string, bc chan BroadcastTo) *Game {
 		playersList: PlayersList{},
 		broadcastch: bc,
 		listenAddr: addr,
-		currentStatus: GameStatusConnected,
+		currentStatus: NewAtomicInt(int32(GameStatusConnected)),
+		currentPlayerAction: NewAtomicInt(0),
 		currentDealer: NewAtomicInt(0),
 		recvPlayerActions: NewPlayerActionsRecv(),
 		currentPlayerTurn: NewAtomicInt(0),
@@ -120,13 +122,16 @@ func NewGame(addr string, bc chan BroadcastTo) *Game {
 // }
 
 func (g *Game) canTakeAction(from string) bool {
-	currentPlayerAddr := g.playersList[g.currentPlayerTurn.Get()]
+	currentPlayerAddr := g.playersList[g.getNextPositionOnTable()]
 	return currentPlayerAddr == from 
 }
 
 func (g *Game) handlePlayerAction(from string, action MessagePlayerAction) error {
 	if !g.canTakeAction(from) {
 		return fmt.Errorf("player (%s) taking action before his turn ", from)
+	}
+	if action.CurrentGameStatus != GameStatus(g.currentStatus.Get()){
+		return fmt.Errorf("player (%s) has not the correct game status (%s)", from, action.CurrentGameStatus)
 	}
 	logrus.WithFields(logrus.Fields{
 		"we": g.listenAddr,
@@ -137,45 +142,16 @@ func (g *Game) handlePlayerAction(from string, action MessagePlayerAction) error
 	return nil
 }
 
-func (g *Game) TakeAction(action PlayerAction, value int) (err error) {
+func (g *Game) TakeAction(action PlayerAction, value int) error {
 	if !g.canTakeAction(g.listenAddr){
 		return fmt.Errorf("I am taking action before it is my turn: %s\n", g.listenAddr)
 	}
-	switch action {
-	case PlayerActionFold:
-		err = g.fold()
-	case PlayerActionCheck:
-		err = g.check()
-	case PlayerActionBet:
-		err = g.bet(value)
-	default:
-		err = fmt.Errorf("performing invalid action (%s)", action)
-	}
-	if err != nil {
-		return err
-	}
+	g.currentPlayerAction.Set((int32)(action))
 	g.currentPlayerTurn.Inc()
-	return 
-}
-
-func (g *Game) bet(value int) error {
-	
-}
-
-func (g *Game) check() error {
-	g.SetStatus(GameStatusChecked)
 	g.sendToPlayers(MessagePlayerAction{
-		Action: PlayerActionCheck,
-		CurrentGameStatus: g.currentStatus,
-	}, g.getOtherPlayers()...)
-	return nil
-}
-
-func (g *Game) fold() error {
-	g.SetStatus(GameStatusFolded)
-	g.sendToPlayers(MessagePlayerAction{
-		Action: PlayerActionFold,
-		CurrentGameStatus: g.currentStatus,
+		Action: action,
+		CurrentGameStatus: GameStatus(g.currentStatus.Get()),
+		Value: value,
 	}, g.getOtherPlayers()...)
 	return nil
 }
@@ -188,8 +164,9 @@ func (g *Game) setStatus(s GameStatus) {
 	if s == GameStatusPreFlop{
 		g.currentPlayerTurn.Inc()
 	}
-	if g.currentStatus != s{
-		atomic.StoreInt32((*int32)(&g.currentStatus), (int32)(s))
+	if GameStatus(g.currentStatus.Get()) != s{
+		// atomic.StoreInt32((*int32)(&g.currentStatus), (int32)(s))
+		g.currentStatus.Set(int32(s))
 	}
 }
 
@@ -279,11 +256,11 @@ func (g *Game) loop() {
 		logrus.WithFields(logrus.Fields{
 			"we": g.listenAddr,
 			"players": g.playersList,
-			"status": g.currentStatus,
+			"gameStatus": GameStatus(g.currentStatus.Get()),
 			"currentDealer": currentDealerAddr,
-			// "playersReady": g.playersReady.recvStatus,
 			"nextPlayerTurn": g.currentPlayerTurn,
 			"playerActions": g.recvPlayerActions.recvActions,
+			"currentPlayerAction": PlayerAction(g.currentPlayerAction.Get()),
 		}).Info()
 	}
 }
