@@ -149,6 +149,7 @@ func (g *Game) handlePlayerAction(from string, action MessagePlayerAction) error
 	logrus.WithFields(logrus.Fields{
 		"we": g.listenAddr,
 		"from": from,
+		"action": action,
 	}).Info("received player action")
 	if g.playersList[g.currentDealer.Get()] == from {
 		g.currentStatus.Set(int32(g.getNextGameStatus()))
@@ -203,16 +204,10 @@ func (g *Game) getCurrentDealerAddr() (string, bool) {
 }
 
 func (g *Game) SetPlayerReady(from string) {
-	logrus.WithFields(logrus.Fields{
-		"we": g.listenAddr,
-		"player": from,
-	}).Info("setting player status to ready")
 	g.playersReady.addRecvStatus(from)
 	if g.playersReady.len() < 2 {
 		return 
 	}
-
-	// g.playersReady.clear()
 	if _, ok := g.getCurrentDealerAddr(); ok{
 		g.InitiateShuffleAndDeal()
 	}
@@ -263,11 +258,6 @@ func (g *Game) sendToPlayers(payload any, addr ...string) {
 		To: addr,
 		Payload: payload,
 	}
-	logrus.WithFields(logrus.Fields{
-		"payload": payload,
-		"player": addr,
-		"we": g.listenAddr,
-	}).Info("sending payload to player")
 }
 
 func (g *Game) AddPlayer(from string) {
