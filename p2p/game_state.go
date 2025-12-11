@@ -117,28 +117,44 @@ func NewGame(addr string, bc chan BroadcastTo) *Game {
 	return g
 }
 
-// func (g *Game) setCurrentPlayerTurn(index int32) {
-// 	atomic.StoreInt32(&g.currentPlayerTurn, index)
-// }
+func (g *Game) getNextGameStatus() GameStatus {
+	switch GameStatus(g.currentStatus.Get()){
+	case GameStatusPreFlop:
+		return GameStatusFlop
+	case GameStatusFlop:
+		return GameStatusTurn
+	case GameStatusTurn:
+		return GameStatusRiver
+	default:
+		panic("invalid game status")
+	}
+}
 
 func (g *Game) canTakeAction(from string) bool {
-	currentPlayerAddr := g.playersList[g.getNextPositionOnTable()]
+	currentPlayerAddr := g.playersList[g.currentPlayerTurn.Get()]
 	return currentPlayerAddr == from 
+}
+
+func (g *Game) isFromCurrentDealer(from string) bool {
+	return g.playersList[g.currentDealer.Get()] == from
 }
 
 func (g *Game) handlePlayerAction(from string, action MessagePlayerAction) error {
 	if !g.canTakeAction(from) {
 		return fmt.Errorf("player (%s) taking action before his turn ", from)
 	}
-	if action.CurrentGameStatus != GameStatus(g.currentStatus.Get()){
+	if action.CurrentGameStatus != GameStatus(g.currentStatus.Get()) && !g.isFromCurrentDealer(from){
 		return fmt.Errorf("player (%s) has not the correct game status (%s)", from, action.CurrentGameStatus)
 	}
 	logrus.WithFields(logrus.Fields{
 		"we": g.listenAddr,
 		"from": from,
 	}).Info("received player action")
+	if g.playersList[g.currentDealer.Get()] == from {
+		g.currentStatus.Set(int32(g.getNextGameStatus()))
+	}
 	g.recvPlayerActions.addAction(from, action)
-	g.currentPlayerTurn.Inc()
+	g.incNextPlayer()
 	return nil
 }
 
@@ -147,7 +163,10 @@ func (g *Game) TakeAction(action PlayerAction, value int) error {
 		return fmt.Errorf("I am taking action before it is my turn: %s\n", g.listenAddr)
 	}
 	g.currentPlayerAction.Set((int32)(action))
-	g.currentPlayerTurn.Inc()
+	g.incNextPlayer()
+	if g.listenAddr == g.playersList[g.currentDealer.Get()]{
+		g.currentStatus.Set(int32(g.getNextGameStatus()))
+	}
 	g.sendToPlayers(MessagePlayerAction{
 		Action: action,
 		CurrentGameStatus: GameStatus(g.currentStatus.Get()),
@@ -156,13 +175,21 @@ func (g *Game) TakeAction(action PlayerAction, value int) error {
 	return nil
 }
 
+func (g *Game) incNextPlayer(){
+	if len(g.playersList)-1 == int(g.currentPlayerTurn.Get()){
+		g.currentPlayerTurn.Set(0)
+		return 
+	}
+	g.currentPlayerTurn.Inc()
+}
+
 func (g *Game) SetStatus(s GameStatus){
 	g.setStatus(s)
 }
 
 func (g *Game) setStatus(s GameStatus) {
 	if s == GameStatusPreFlop{
-		g.currentPlayerTurn.Inc()
+		g.incNextPlayer()
 	}
 	if GameStatus(g.currentStatus.Get()) != s{
 		// atomic.StoreInt32((*int32)(&g.currentStatus), (int32)(s))
