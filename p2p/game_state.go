@@ -56,6 +56,12 @@ func (pa *PlayerActionsRecv) addAction(from string, action MessagePlayerAction) 
 	pa.recvActions[from] = action 
 }
 
+func (pa *PlayerActionsRecv) clear() {
+	pa.mu.Lock()
+	defer pa.mu.Unlock()
+	pa.recvActions = map[string]MessagePlayerAction{}
+}
+
 type PlayersReady struct {
 	recvStatus map[string]bool 
 	mu sync.RWMutex
@@ -93,6 +99,7 @@ type Game struct {
 	broadcastch chan BroadcastTo 
 	playersReady *PlayersReady
 	playersList PlayersList
+	// playersReadyList PlayersList
 	currentStatus *AtomicInt
 	currentPlayerAction *AtomicInt
 	currentDealer *AtomicInt
@@ -146,16 +153,16 @@ func (g *Game) handlePlayerAction(from string, action MessagePlayerAction) error
 	if action.CurrentGameStatus != GameStatus(g.currentStatus.Get()) && !g.isFromCurrentDealer(from){
 		return fmt.Errorf("player (%s) has not the correct game status (%s)", from, action.CurrentGameStatus)
 	}
+	g.recvPlayerActions.addAction(from, action)
+	if g.playersList[g.currentDealer.Get()] == from {
+		g.advanceToNextRound()
+	}
+	g.incNextPlayer()
 	logrus.WithFields(logrus.Fields{
 		"we": g.listenAddr,
 		"from": from,
 		"action": action,
 	}).Info("received player action")
-	if g.playersList[g.currentDealer.Get()] == from {
-		g.currentStatus.Set(int32(g.getNextGameStatus()))
-	}
-	g.recvPlayerActions.addAction(from, action)
-	g.incNextPlayer()
 	return nil
 }
 
@@ -174,6 +181,12 @@ func (g *Game) TakeAction(action PlayerAction, value int) error {
 		Value: value,
 	}, g.getOtherPlayers()...)
 	return nil
+}
+
+func (g *Game) advanceToNextRound() {
+	g.recvPlayerActions.clear()
+	g.currentPlayerAction.Set((int32(PlayerActionIdle)))
+	g.currentStatus.Set(int32(g.getNextGameStatus()))
 }
 
 func (g *Game) incNextPlayer(){
