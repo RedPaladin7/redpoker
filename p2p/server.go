@@ -268,7 +268,7 @@ func (s *Server) Broadcast(broadcastMsg BroadcastTo) error {
 // client encodes handshake object and sends it 
 // only raw bytes can be sent over net.Conn object
 func (s *Server) handshake(p *Peer) (*Handshake, error) {
-	if len(s.peers) < s.MaxPlayers {
+	if len(s.peers) > s.MaxPlayers {
 		return nil, fmt.Errorf("max players exceeded (%d)", s.MaxPlayers)
 	}
 	hs := &Handshake{}

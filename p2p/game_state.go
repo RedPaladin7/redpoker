@@ -12,6 +12,33 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type Table struct {
+	lock sync.RWMutex
+	seats map[int]string 
+	maxSeats int
+}
+
+func NewTable(maxSeats int) *Table {
+	return &Table{
+		seats: make(map[int]string),
+		maxSeats: maxSeats,
+	}
+}
+
+func (t *Table) AddPlayer(addr string) error {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	if len(t.seats) == t.maxSeats {
+		return fmt.Errorf("player table is full")
+	}
+	t.seats[t.getNextFreeSeat()] = addr 
+	return nil
+}
+
+func (t *Table) getNextFreeSeat() int {
+	return 0
+}
+
 type PlayersList struct {
 	lock sync.RWMutex
 	list []string
