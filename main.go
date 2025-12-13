@@ -23,7 +23,7 @@ func makeServerAndStart(addr, apiAddr string) *p2p.Server{
 func main(){
 	playerA := makeServerAndStart(":3000", ":3001")
 	playerB := makeServerAndStart(":4000", ":4001")
-	playerC := makeServerAndStart(":5000", ":5001")
+	// playerC := makeServerAndStart(":5000", ":5001")
 	// playerD := makeServerAndStart(":6000", ":6001")
 	
 	go func() {
@@ -33,16 +33,16 @@ func main(){
 		time.Sleep(time.Second * 1)
 		http.Get("http://localhost:4001/ready")
 
-		time.Sleep(time.Second * 1)
-		http.Get("http://localhost:5001/ready")
+		// time.Sleep(time.Second * 1)
+		// http.Get("http://localhost:5001/ready")
 
 		// time.Sleep(time.Second * 1)
 		// http.Get("http://localhost:6001/ready")
 
 		time.Sleep(time.Second * 1)
 		http.Get("http://localhost:4001/fold")
-		time.Sleep(time.Second * 1)
-		http.Get("http://localhost:5001/fold")
+		// time.Sleep(time.Second * 1)
+		// http.Get("http://localhost:5001/fold")
 		time.Sleep(time.Second * 1)
 		http.Get("http://localhost:3001/fold")
 	}()
@@ -50,8 +50,8 @@ func main(){
 	time.Sleep(time.Millisecond * 200)
 	playerB.Connect(playerA.ListenAddr)
 
-	time.Sleep(time.Millisecond * 200)
-	playerC.Connect(playerB.ListenAddr)
+	// time.Sleep(time.Millisecond * 200)
+	// playerC.Connect(playerB.ListenAddr)
 
 	// time.Sleep(time.Millisecond * 200)
 	// playerD.Connect(playerC.ListenAddr)
